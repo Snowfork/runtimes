@@ -25,11 +25,6 @@ use snowbridge_pallet_ethereum_client::{
 	NextSyncCommittee,
 };
 
-#[cfg(test)]
-use frame_support::assert_ok;
-#[cfg(test)]
-use snowbridge_beacon_primitives::BlsError;
-
 #[cfg(feature = "try-runtime")]
 use sp_runtime::TryRuntimeError;
 #[cfg(feature = "try-runtime")]
