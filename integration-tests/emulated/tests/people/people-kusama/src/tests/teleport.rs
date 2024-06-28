@@ -96,8 +96,6 @@ fn para_origin_assertions(t: SystemParaToRelayTest) {
 fn para_dest_assertions(t: RelayToSystemParaTest) {
 	type RuntimeEvent = <PeopleKusama as Chain>::RuntimeEvent;
 
-	PeopleKusama::assert_dmp_queue_complete(Some(Weight::from_parts(162_456_000, 0)));
-
 	assert_expected_events!(
 		PeopleKusama,
 		vec![

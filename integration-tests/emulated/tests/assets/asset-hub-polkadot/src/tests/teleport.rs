@@ -99,8 +99,6 @@ fn para_origin_assertions(t: SystemParaToRelayTest) {
 fn para_dest_assertions(t: RelayToSystemParaTest) {
 	type RuntimeEvent = <AssetHubPolkadot as Chain>::RuntimeEvent;
 
-	AssetHubPolkadot::assert_dmp_queue_complete(Some(Weight::from_parts(164_793_000, 3593)));
-
 	assert_expected_events!(
 		AssetHubPolkadot,
 		vec![

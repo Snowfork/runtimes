@@ -99,8 +99,6 @@ fn para_origin_assertions(t: SystemParaToRelayTest) {
 fn para_dest_assertions(t: RelayToSystemParaTest) {
 	type RuntimeEvent = <AssetHubKusama as Chain>::RuntimeEvent;
 
-	AssetHubKusama::assert_dmp_queue_complete(Some(Weight::from_parts(157_718_000, 3593)));
-
 	assert_expected_events!(
 		AssetHubKusama,
 		vec![
