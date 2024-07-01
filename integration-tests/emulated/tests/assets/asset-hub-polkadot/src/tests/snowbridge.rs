@@ -256,7 +256,7 @@ fn create_vesting_payment() {
 		// block number ensure the vesting finished
 		System::set_block_number(21);
 
-		assert_ok!(Vesting::vest(RuntimeOrigin::signed(bob.into())));
+		assert_ok!(Vesting::vest(RuntimeOrigin::signed(bob)));
 
 		assert_expected_events!(
 			Polkadot,
