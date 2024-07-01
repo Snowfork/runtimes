@@ -722,6 +722,7 @@ dependencies = [
  "pallet-balances",
  "pallet-message-queue",
  "pallet-treasury",
+ "pallet-vesting",
  "pallet-xcm",
  "parachains-common",
  "parity-scale-codec",

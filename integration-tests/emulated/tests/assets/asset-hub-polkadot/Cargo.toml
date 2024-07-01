@@ -19,6 +19,7 @@ pallet-assets = { workspace = true, default-features = true }
 pallet-asset-conversion = { workspace = true, default-features = true }
 pallet-treasury = { workspace = true, default-features = true }
 pallet-message-queue = { workspace = true, default-features = true }
+pallet-vesting = { workspace = true, default-features = true }
 
 # Polkadot
 polkadot-runtime-common = { workspace = true, default-features = true }

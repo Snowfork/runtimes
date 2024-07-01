@@ -40,6 +40,8 @@ decl_test_relay_chains! {
 			Hrmp: polkadot_runtime::Hrmp,
 			Identity: polkadot_runtime::Identity,
 			IdentityMigrator: polkadot_runtime::IdentityMigrator,
+			System: polkadot_runtime::System,
+			Vesting: polkadot_runtime::Vesting,
 		}
 	},
 }
