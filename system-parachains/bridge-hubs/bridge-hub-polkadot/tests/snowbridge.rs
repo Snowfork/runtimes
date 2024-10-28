@@ -332,16 +332,26 @@ pub fn ethereum_extrinsic<Runtime>(
 				}
 					.into();
 
-			let block_number = <frame_system::Pallet<Runtime>>::block_number();
-			let next_block_number = <frame_system::Pallet<Runtime>>::block_number()
-				.saturating_add(BlockNumberFor::<Runtime>::from(1u32));
+			// Block 1
+			let mut block_number = 1u32;
+			println!("BLOCK NUMBER {}", block_number);
 
 			// Finalized header update
 			let update_outcome = construct_and_apply_extrinsic(alice, update_call.into());
 			assert_ok!(update_outcome);
 			let balance_after_update =
 				<pallet_balances::Pallet<Runtime>>::free_balance(&alice_account.clone().into());
-			println!("block_number: {}", block_number);
+
+			// Finish Block 1
+			<snowbridge_pallet_ethereum_client::Pallet<Runtime>>::on_finalize(block_number.into());
+			<frame_system::Pallet<Runtime>>::on_finalize(block_number.into());
+
+			// Start Block 2
+			block_number = 2u32;
+			<frame_system::Pallet<Runtime>>::set_block_number(block_number.into());
+			<frame_system::Pallet<Runtime>>::on_initialize(block_number.into());
+			<snowbridge_pallet_ethereum_client::Pallet<Runtime>>::on_initialize(block_number.into());
+			println!("BLOCK NUMBER {}", block_number);
 
 			// Invalid finalized header update
 			let invalid_update_outcome =
@@ -352,21 +362,17 @@ pub fn ethereum_extrinsic<Runtime>(
 			);
 			let balance_after_invalid_update =
 				<pallet_balances::Pallet<Runtime>>::free_balance(&alice_account.clone().into());
-			println!("block_number: {}", block_number);
 
-			// finish current block
-			<snowbridge_pallet_ethereum_client::Pallet<Runtime>>::on_finalize(block_number);
-			<frame_system::Pallet<Runtime>>::on_finalize(block_number);
+			// Finish Block 2
+			<snowbridge_pallet_ethereum_client::Pallet<Runtime>>::on_finalize(block_number.into());
+			<frame_system::Pallet<Runtime>>::on_finalize(block_number.into());
 
-			// start next block
-			<frame_system::Pallet<Runtime>>::set_block_number(next_block_number);
-			<frame_system::Pallet<Runtime>>::on_initialize(next_block_number);
-			<snowbridge_pallet_ethereum_client::Pallet<Runtime>>::on_initialize(next_block_number);
-			let block_number = <frame_system::Pallet<Runtime>>::block_number();
-			println!("block_number: {}", block_number);
-
-			let next_block_number = <frame_system::Pallet<Runtime>>::block_number()
-				.saturating_add(BlockNumberFor::<Runtime>::from(1u32));
+			// Start Block 3
+			block_number = 3u32;
+			<frame_system::Pallet<Runtime>>::set_block_number(block_number.into());
+			<frame_system::Pallet<Runtime>>::on_initialize(block_number.into());
+			<snowbridge_pallet_ethereum_client::Pallet<Runtime>>::on_initialize(block_number.into());
+			println!("BLOCK NUMBER {}", block_number);
 
 			// Sync committee update
 			let sync_committee_outcome =
@@ -374,6 +380,17 @@ pub fn ethereum_extrinsic<Runtime>(
 			assert_ok!(sync_committee_outcome);
 			let balance_after_sync_com_update =
 				<pallet_balances::Pallet<Runtime>>::free_balance(&alice_account.clone().into());
+
+			// Finish Block 3
+			<snowbridge_pallet_ethereum_client::Pallet<Runtime>>::on_finalize(block_number.into());
+			<frame_system::Pallet<Runtime>>::on_finalize(block_number.into());
+
+			// Start Block 4
+			block_number = 4u32;
+			<frame_system::Pallet<Runtime>>::set_block_number(block_number.into());
+			<frame_system::Pallet<Runtime>>::on_initialize(block_number.into());
+			<snowbridge_pallet_ethereum_client::Pallet<Runtime>>::on_initialize(block_number.into());
+			println!("BLOCK NUMBER {}", block_number);
 
 			// Invalid sync committee update
 			let invalid_sync_committee_outcome =
@@ -384,6 +401,17 @@ pub fn ethereum_extrinsic<Runtime>(
 			);
 			let balance_after_invalid_sync_com_update =
 				<pallet_balances::Pallet<Runtime>>::free_balance(&alice_account.clone().into());
+
+			// Finish Block 4
+			<snowbridge_pallet_ethereum_client::Pallet<Runtime>>::on_finalize(block_number.into());
+			<frame_system::Pallet<Runtime>>::on_finalize(block_number.into());
+
+			// Start Block 5
+			block_number = 5u32;
+			<frame_system::Pallet<Runtime>>::set_block_number(block_number.into());
+			<frame_system::Pallet<Runtime>>::on_initialize(block_number.into());
+			<snowbridge_pallet_ethereum_client::Pallet<Runtime>>::on_initialize(block_number.into());
+			println!("BLOCK NUMBER {}", block_number);
 
 			// Assert paid operations are charged and free operations are free
 			// Checkpoint is a free operation
@@ -403,6 +431,10 @@ pub fn ethereum_extrinsic<Runtime>(
 			assert!(balance_after_invalid_update == balance_after_sync_com_update);
 			// An invalid sync committee update is paid
 			assert!(balance_after_sync_com_update > balance_after_invalid_sync_com_update);
+
+			// Finish Block 5
+			<snowbridge_pallet_ethereum_client::Pallet<Runtime>>::on_finalize(block_number.into());
+			<frame_system::Pallet<Runtime>>::on_finalize(block_number.into());
 		});
 }
 
