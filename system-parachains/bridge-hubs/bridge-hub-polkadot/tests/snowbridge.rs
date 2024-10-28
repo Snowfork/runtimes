@@ -27,7 +27,7 @@ use bridge_hub_polkadot_runtime::{
 };
 use codec::{Decode, Encode};
 use cumulus_primitives_core::XcmError::{FailedToTransactAsset, TooExpensive};
-use frame_support::{parameter_types, traits::Contains};
+use frame_support::{parameter_types, traits::{Contains, fungible::Mutate, OnFinalize, OnInitialize}};
 use parachains_common::{AccountId, AuraId, Balance};
 pub use parachains_runtimes_test_utils::test_cases::change_storage_constant_by_governance_works;
 use snowbridge_pallet_ethereum_client::WeightInfo;
@@ -40,10 +40,22 @@ use sp_runtime::{
 use xcm::latest::prelude::*;
 use xcm_builder::HandleFee;
 use xcm_executor::traits::{FeeManager, FeeReason};
-
+use sp_core::Get;
+use sp_runtime::SaturatedConversion;
+use sp_runtime::Saturating;
+use parachains_runtimes_test_utils::{
+	AccountIdOf, BalanceOf, CollatorSessionKeys, ExtBuilder, ValidatorIdOf,
+};
+use frame_system::pallet_prelude::BlockNumberFor;
+use frame_support::assert_err;
+use frame_support::assert_ok;
+use snowbridge_pallet_ethereum_client_fixtures::*;
 parameter_types! {
 		pub const DefaultBridgeHubEthereumBaseFee: Balance = 2_750_872_500_000;
 }
+
+type RuntimeHelper<Runtime, AllPalletsWithoutSystem = ()> =
+parachains_runtimes_test_utils::RuntimeHelper<Runtime, AllPalletsWithoutSystem>;
 
 fn collator_session_keys() -> bridge_hub_test_utils::CollatorSessionKeys<Runtime> {
 	bridge_hub_test_utils::CollatorSessionKeys::new(
@@ -199,7 +211,7 @@ fn max_message_queue_service_weight_is_more_than_beacon_extrinsic_weights() {
 // FAIL-CI @bkontur can you help me to check why it's exceeding the weight limits?
 #[test]
 fn ethereum_client_consensus_extrinsics_work() {
-	snowbridge_runtime_test_common::ethereum_extrinsic(
+	ethereum_extrinsic(
 		collator_session_keys(),
 		1013,
 		construct_and_apply_extrinsic,
@@ -236,6 +248,162 @@ fn ethereum_outbound_queue_processes_messages_before_message_queue_works() {
 			}
 		}),
 	)
+}
+
+pub fn ethereum_extrinsic<Runtime>(
+	collator_session_key: CollatorSessionKeys<Runtime>,
+	runtime_para_id: u32,
+	construct_and_apply_extrinsic: fn(
+		sp_keyring::AccountKeyring,
+		<Runtime as frame_system::Config>::RuntimeCall,
+	) -> sp_runtime::DispatchOutcome,
+) where
+	Runtime: frame_system::Config
+	+ pallet_balances::Config
+	+ pallet_session::Config
+	+ pallet_xcm::Config
+	+ pallet_utility::Config
+	+ parachain_info::Config
+	+ pallet_collator_selection::Config
+	+ cumulus_pallet_parachain_system::Config
+	+ snowbridge_pallet_outbound_queue::Config
+	+ snowbridge_pallet_system::Config
+	+ snowbridge_pallet_ethereum_client::Config
+	+ pallet_timestamp::Config,
+	ValidatorIdOf<Runtime>: From<AccountIdOf<Runtime>>,
+	<Runtime as pallet_utility::Config>::RuntimeCall:
+	From<snowbridge_pallet_ethereum_client::Call<Runtime>>,
+	<Runtime as frame_system::Config>::RuntimeCall: From<pallet_utility::Call<Runtime>>,
+	AccountIdOf<Runtime>: From<AccountId32>,
+{
+	ExtBuilder::<Runtime>::default()
+		.with_collators(collator_session_key.collators())
+		.with_session_keys(collator_session_key.session_keys())
+		.with_para_id(runtime_para_id.into())
+		.with_tracing()
+		.build()
+		.execute_with(|| {
+			let initial_checkpoint = make_checkpoint();
+			let update = make_finalized_header_update();
+			let sync_committee_update = make_sync_committee_update();
+			let mut invalid_update = make_finalized_header_update();
+			let mut invalid_sync_committee_update = make_sync_committee_update();
+			invalid_update.finalized_header.slot = 4354;
+			invalid_sync_committee_update.finalized_header.slot = 4354;
+
+			let alice = Alice;
+			let alice_account = alice.to_account_id();
+			<pallet_balances::Pallet<Runtime>>::mint_into(
+				&alice_account.clone().into(),
+				10_000_000_000_000_u128.saturated_into::<BalanceOf<Runtime>>(),
+			)
+				.unwrap();
+			let balance_before =
+				<pallet_balances::Pallet<Runtime>>::free_balance(&alice_account.clone().into());
+
+			assert_ok!(<snowbridge_pallet_ethereum_client::Pallet<Runtime>>::force_checkpoint(
+				RuntimeHelper::<Runtime>::root_origin(),
+				initial_checkpoint.clone(),
+			));
+			let balance_after_checkpoint =
+				<pallet_balances::Pallet<Runtime>>::free_balance(&alice_account.clone().into());
+
+			let update_call: <Runtime as pallet_utility::Config>::RuntimeCall =
+				snowbridge_pallet_ethereum_client::Call::<Runtime>::submit {
+					update: Box::new(*update.clone()),
+				}
+					.into();
+
+			let invalid_update_call: <Runtime as pallet_utility::Config>::RuntimeCall =
+				snowbridge_pallet_ethereum_client::Call::<Runtime>::submit {
+					update: Box::new(*invalid_update),
+				}
+					.into();
+
+			let update_sync_committee_call: <Runtime as pallet_utility::Config>::RuntimeCall =
+				snowbridge_pallet_ethereum_client::Call::<Runtime>::submit {
+					update: Box::new(*sync_committee_update),
+				}
+					.into();
+
+			let invalid_update_sync_committee_call: <Runtime as pallet_utility::Config>::RuntimeCall =
+				snowbridge_pallet_ethereum_client::Call::<Runtime>::submit {
+					update: Box::new(*invalid_sync_committee_update),
+				}
+					.into();
+
+			let block_number = <frame_system::Pallet<Runtime>>::block_number();
+			let next_block_number = <frame_system::Pallet<Runtime>>::block_number()
+				.saturating_add(BlockNumberFor::<Runtime>::from(1u32));
+
+			// Finalized header update
+			let update_outcome = construct_and_apply_extrinsic(alice, update_call.into());
+			assert_ok!(update_outcome);
+			let balance_after_update =
+				<pallet_balances::Pallet<Runtime>>::free_balance(&alice_account.clone().into());
+			println!("block_number: {}", block_number);
+
+			// Invalid finalized header update
+			let invalid_update_outcome =
+				construct_and_apply_extrinsic(alice, invalid_update_call.into());
+			assert_err!(
+				invalid_update_outcome,
+				snowbridge_pallet_ethereum_client::Error::<Runtime>::InvalidUpdateSlot
+			);
+			let balance_after_invalid_update =
+				<pallet_balances::Pallet<Runtime>>::free_balance(&alice_account.clone().into());
+			println!("block_number: {}", block_number);
+
+			// finish current block
+			<snowbridge_pallet_ethereum_client::Pallet<Runtime>>::on_finalize(block_number);
+			<frame_system::Pallet<Runtime>>::on_finalize(block_number);
+
+			// start next block
+			<frame_system::Pallet<Runtime>>::set_block_number(next_block_number);
+			<frame_system::Pallet<Runtime>>::on_initialize(next_block_number);
+			<snowbridge_pallet_ethereum_client::Pallet<Runtime>>::on_initialize(next_block_number);
+			let block_number = <frame_system::Pallet<Runtime>>::block_number();
+			println!("block_number: {}", block_number);
+
+			let next_block_number = <frame_system::Pallet<Runtime>>::block_number()
+				.saturating_add(BlockNumberFor::<Runtime>::from(1u32));
+
+			// Sync committee update
+			let sync_committee_outcome =
+				construct_and_apply_extrinsic(alice, update_sync_committee_call.into());
+			assert_ok!(sync_committee_outcome);
+			let balance_after_sync_com_update =
+				<pallet_balances::Pallet<Runtime>>::free_balance(&alice_account.clone().into());
+
+			// Invalid sync committee update
+			let invalid_sync_committee_outcome =
+				construct_and_apply_extrinsic(alice, invalid_update_sync_committee_call.into());
+			assert_err!(
+				invalid_sync_committee_outcome,
+				snowbridge_pallet_ethereum_client::Error::<Runtime>::InvalidUpdateSlot
+			);
+			let balance_after_invalid_sync_com_update =
+				<pallet_balances::Pallet<Runtime>>::free_balance(&alice_account.clone().into());
+
+			// Assert paid operations are charged and free operations are free
+			// Checkpoint is a free operation
+			assert!(balance_before == balance_after_checkpoint);
+			let gap =
+				<Runtime as snowbridge_pallet_ethereum_client::Config>::FreeHeadersInterval::get();
+			// Large enough header gap is free
+			if update.finalized_header.slot >= initial_checkpoint.header.slot + gap as u64 {
+				assert!(balance_after_checkpoint == balance_after_update);
+			} else {
+				// Otherwise paid
+				assert!(balance_after_checkpoint > balance_after_update);
+			}
+			// An invalid update is paid
+			assert!(balance_after_update > balance_after_invalid_update);
+			// A successful sync committee update is free
+			assert!(balance_after_invalid_update == balance_after_sync_com_update);
+			// An invalid sync committee update is paid
+			assert!(balance_after_sync_com_update > balance_after_invalid_sync_com_update);
+		});
 }
 
 fn construct_extrinsic(
