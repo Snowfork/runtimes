@@ -248,7 +248,7 @@ fn register_weth_token_from_ethereum_to_asset_hub() {
 		});
 		// Convert the message to XCM
 		let (xcm, _) = EthereumInboundQueue::do_convert([0; 32].into(), message).unwrap();
-		let _ = EthereumInboundQueue::send_xcm(xcm, AssetHubPolkadot::para_id().into()).unwrap();
+		let _ = EthereumInboundQueue::send_xcm(xcm, AssetHubPolkadot::para_id()).unwrap();
 
 		assert_expected_events!(
 			BridgeHubPolkadot,
@@ -1019,7 +1019,7 @@ fn transfer_relay_token() {
 
 		let beneficiary = VersionedLocation::V4(Location::new(
 			0,
-			[AccountKey20 { network: None, key: ETHEREUM_DESTINATION_ADDRESS.into() }],
+			[AccountKey20 { network: None, key: ETHEREUM_DESTINATION_ADDRESS }],
 		));
 
 		assert_ok!(<AssetHubPolkadot as AssetHubPolkadotPallet>::PolkadotXcm::limited_reserve_transfer_assets(
@@ -1070,7 +1070,7 @@ fn transfer_relay_token() {
 		// Convert the message to XCM
 		let (xcm, _) = EthereumInboundQueue::do_convert(message_id, message).unwrap();
 		// Send the XCM
-		let _ = EthereumInboundQueue::send_xcm(xcm, AssetHubPolkadot::para_id().into()).unwrap();
+		let _ = EthereumInboundQueue::send_xcm(xcm, AssetHubPolkadot::para_id()).unwrap();
 
 		assert_expected_events!(
 			BridgeHubPolkadot,
@@ -1181,7 +1181,7 @@ fn transfer_ah_token() {
 
 		let beneficiary = VersionedLocation::V4(Location::new(
 			0,
-			[AccountKey20 { network: None, key: ETHEREUM_DESTINATION_ADDRESS.into() }],
+			[AccountKey20 { network: None, key: ETHEREUM_DESTINATION_ADDRESS }],
 		));
 
 		assert_ok!(<AssetHubPolkadot as AssetHubPolkadotPallet>::PolkadotXcm::limited_reserve_transfer_assets(
@@ -1235,7 +1235,7 @@ fn transfer_ah_token() {
 		// Convert the message to XCM
 		let (xcm, _) = EthereumInboundQueue::do_convert([0; 32].into(), message).unwrap();
 		// Send the XCM
-		let _ = EthereumInboundQueue::send_xcm(xcm, AssetHubPolkadot::para_id().into()).unwrap();
+		let _ = EthereumInboundQueue::send_xcm(xcm, AssetHubPolkadot::para_id()).unwrap();
 
 		assert_expected_events!(
 			BridgeHubPolkadot,
