@@ -1835,3 +1835,11 @@ pub mod remove_when_asset_test_utils_doesnt_use_latest_xcm_location {
 	}
 );
 }
+
+#[test]
+fn polkadot_to_kusama_bridging_fee() {
+	let value = bp_bridge_hub_polkadot::estimate_polkadot_to_kusama_message_fee(
+		bp_bridge_hub_kusama::BridgeHubKusamaBaseDeliveryFeeInKsms::get()
+	);
+	println!("fee is {}", value); // 333794429 KSM (0.0003 KSM)
+}
