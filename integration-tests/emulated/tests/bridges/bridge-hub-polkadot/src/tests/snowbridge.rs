@@ -1489,6 +1489,7 @@ fn send_weth_from_ethereum_to_ahp_to_ahk_and_back() {
 		vec![(weth_location.clone(), MIN_ETHER_BALANCE).into(), (fee_latest, XCM_FEE * 3).into()]
 			.into();
 
+	println!("========================START POLKADOT ASSET HUB TO KUSAMA ASSET HUB========================");
 	assert_ok!(AssetHubPolkadot::execute_with(|| {
 		<AssetHubPolkadot as AssetHubPolkadotPallet>::PolkadotXcm::transfer_assets_using_type_and_then(
 			<AssetHubPolkadot as Chain>::RuntimeOrigin::signed(sender),
@@ -1559,6 +1560,9 @@ fn send_weth_from_ethereum_to_ahp_to_ahk_and_back() {
 	let assets: Assets =
 		vec![(weth_location.clone(), MIN_ETHER_BALANCE).into(), (fee_latest, XCM_FEE).into()]
 			.into();
+
+	println!("========================POLKADOT ASSET HUB TO KUSAMA ASSET HUB DONE========================");
+	println!("========================START KUSAMA ASSET HUB TO POLKADOT ASSET HUB========================");
 
 	// Transfer the token back to Polkadot.
 	assert_ok!(AssetHubKusama::execute_with(|| {
@@ -1631,6 +1635,8 @@ fn send_weth_from_ethereum_to_ahp_to_ahk_and_back() {
 			"Assets were trapped, should not happen."
 		);
 	});
+
+	println!("========================KUSAMA ASSET HUB TO POLKADOT ASSET HUB DONE========================");
 
 	send_token_back_to_ethereum(weth_location, MIN_ETHER_BALANCE);
 }

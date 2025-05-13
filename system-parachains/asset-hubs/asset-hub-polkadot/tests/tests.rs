@@ -1781,5 +1781,5 @@ fn polkadot_to_kusama_bridging_fee() {
 	let value = bp_bridge_hub_polkadot::estimate_polkadot_to_kusama_message_fee(
 		bp_bridge_hub_kusama::BridgeHubKusamaBaseDeliveryFeeInKsms::get()
 	);
-	println!("fee is {}", value); // 333794429 KSM (0.0003 KSM)
+	println!("fee is {}", value); // 333794429 DOT (0.03 DOT)
 }
