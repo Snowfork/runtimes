@@ -704,8 +704,7 @@ fn send_ksm_asset_hub_kusama_to_asset_hub_polkadot_using_dot_as_fee() {
 		].into();
 
 		let asset_transfer_type = TransferType::LocalReserve;
-		//let fees_id: AssetId = dot_on_kusama.clone().into();
-		let fees_id: AssetId = (Location::new(1, Here)).into();
+		let fees_id: AssetId = dot_on_kusama.clone().into();
 		let fees_transfer_type = TransferType::DestinationReserve;
 		let beneficiary: Location =
 			AccountId32Junction { network: None, id: receiver.clone().into() }.into();
