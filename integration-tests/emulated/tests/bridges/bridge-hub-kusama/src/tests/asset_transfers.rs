@@ -674,3 +674,80 @@ fn send_back_dot_from_penpal_kusama_through_asset_hub_kusama_to_asset_hub_polkad
 	assert!(receiver_dot_after > receiver_dot_before);
 	assert!(receiver_dot_after <= receiver_dot_before + amount);
 }
+
+#[test]
+fn send_ksm_asset_hub_kusama_to_asset_hub_polkadot_using_dot_as_fee() {
+	let ksm_at_asset_hub_polkadot = bridged_ksm_at_ah_polkadot();
+	let amount = ASSET_HUB_KUSAMA_ED * 10_000_000;
+	let fees_amount = ASSET_HUB_KUSAMA_ED * 10_000_000;
+	let receiver = AssetHubPolkadotReceiver::get();
+	let sender = KusamaSender::get();
+
+	AssetHubKusama::fund_accounts(vec![
+		(sender.clone(), fees_amount),
+	]);
+
+	let dot_at_kusama_asset_hub = bridged_dot_at_ah_kusama();
+	let prefund_accounts = vec![(sender.clone(), amount * 2)];
+	create_foreign_on_ah_kusama(dot_at_kusama_asset_hub.clone(), true, prefund_accounts);
+	create_foreign_on_ah_polkadot(ksm_at_asset_hub_polkadot.clone(), true);
+
+	set_up_pool_with_dot_on_ah_polkadot(ksm_at_asset_hub_polkadot.clone(), true);
+
+	let dot_on_kusama = Location::new(2, [GlobalConsensus(Polkadot)]);
+	// Send KSMs over bridge
+	{
+		let destination = asset_hub_polkadot_location();
+		let assets: Assets = vec![
+			(Location::new(1, Here), amount.saturating_add(fees_amount)).into(), // KSM
+			(dot_on_kusama.clone(), fees_amount).into()
+		].into();
+
+		let asset_transfer_type = TransferType::LocalReserve;
+		//let fees_id: AssetId = dot_on_kusama.clone().into();
+		let fees_id: AssetId = (Location::new(1, Here)).into();
+		let fees_transfer_type = TransferType::DestinationReserve;
+		let beneficiary: Location =
+			AccountId32Junction { network: None, id: receiver.clone().into() }.into();
+		let custom_xcm_on_dest = Xcm::<()>(vec![DepositAsset {
+			assets: Wild(AllCounted(assets.len() as u32)),
+			beneficiary,
+		}]);
+
+		send_assets_from_kusama_chain_through_kusama_ah_to_polkadot_ah(|| {
+			// send message over bridge
+			assert_ok!(PenpalA::execute_with(|| {
+				let signed_origin = <PenpalA as Chain>::RuntimeOrigin::signed(sender.clone());
+				<PenpalA as PenpalAPallet>::PolkadotXcm::transfer_assets_using_type_and_then(
+					signed_origin,
+					bx!(destination.into()),
+					bx!(assets.into()),
+					bx!(asset_transfer_type),
+					bx!(fees_id.into()),
+					bx!(fees_transfer_type),
+					bx!(VersionedXcm::from(custom_xcm_on_dest)),
+					WeightLimit::Unlimited,
+				)
+			}));
+		});
+	}
+
+	// process PAH incoming message and check events
+	AssetHubPolkadot::execute_with(|| {
+		type RuntimeEvent = <AssetHubPolkadot as Chain>::RuntimeEvent;
+		assert_expected_events!(
+			AssetHubPolkadot,
+			vec![
+				// issue KSMs on PAH
+				RuntimeEvent::ForeignAssets(pallet_assets::Event::Issued { asset_id, owner, .. }) => {
+					asset_id: *asset_id == ksm_at_asset_hub_polkadot.clone(),
+					owner: owner == &receiver,
+				},
+				// message processed successfully
+				RuntimeEvent::MessageQueue(
+					pallet_message_queue::Event::Processed { success: true, .. }
+				) => {},
+			]
+		);
+	});
+}
