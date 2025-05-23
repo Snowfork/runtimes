@@ -13,7 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use bridge_hub_kusama_runtime::xcm_config::RelayTreasuryPalletAccount;
 use crate::tests::*;
+const INITIAL_FUND: u128 = 1_000_000_000_000 * KUSAMA_ED;
 
 fn send_assets_over_bridge<F: FnOnce()>(send_fn: F) {
 	// fund the KAH's SA on BHR for paying bridge transport fees
@@ -679,27 +681,51 @@ fn send_back_dot_from_penpal_kusama_through_asset_hub_kusama_to_asset_hub_polkad
 fn send_ksm_asset_hub_kusama_to_asset_hub_polkadot_using_dot_as_fee() {
 	let ksm_at_asset_hub_polkadot = bridged_ksm_at_ah_polkadot();
 	let amount = ASSET_HUB_KUSAMA_ED * 10_000_000;
-	let fees_amount = ASSET_HUB_KUSAMA_ED * 10_000_000;
+	let fees_amount = 50_000_0000;
 	let receiver = AssetHubPolkadotReceiver::get();
 	let sender = KusamaSender::get();
 
+	let assethub_location = BridgeHubPolkadot::sibling_location_of(AssetHubPolkadot::para_id());
+	let assethub_sovereign = BridgeHubPolkadot::sovereign_account_id_of(assethub_location);
+	let assethub_sovereign_kah = AssetHubPolkadot::sovereign_account_of_parachain_on_other_global_consensus(Kusama, AssetHubKusama::para_id());
+
 	AssetHubKusama::fund_accounts(vec![
-		(sender.clone(), fees_amount),
+		(sender.clone(), amount * 2),
 	]);
 
+	BridgeHubPolkadot::fund_accounts(vec![
+		(assethub_sovereign.clone(), INITIAL_FUND),
+		(RelayTreasuryPalletAccount::get(), INITIAL_FUND),
+	]);
+	AssetHubPolkadot::fund_accounts(vec![
+		(assethub_sovereign_kah.clone(), INITIAL_FUND),
+		(AssetHubPolkadotReceiver::get(), INITIAL_FUND),
+		(sender.clone(), INITIAL_FUND),
+	]);
+	BridgeHubKusama::fund_para_sovereign(AssetHubKusama::para_id(), INITIAL_FUND);
+	BridgeHubPolkadot::fund_para_sovereign(AssetHubPolkadot::para_id(), INITIAL_FUND);
+
 	let dot_at_kusama_asset_hub = bridged_dot_at_ah_kusama();
-	let prefund_accounts = vec![(sender.clone(), amount * 2)];
+	let prefund_accounts = vec![(sender.clone(), fees_amount * 2)];
 	create_foreign_on_ah_kusama(dot_at_kusama_asset_hub.clone(), true, prefund_accounts);
 	create_foreign_on_ah_polkadot(ksm_at_asset_hub_polkadot.clone(), true);
 
 	set_up_pool_with_dot_on_ah_polkadot(ksm_at_asset_hub_polkadot.clone(), true);
 
 	let dot_on_kusama = Location::new(2, [GlobalConsensus(Polkadot)]);
+
+	BridgeHubPolkadot::force_xcm_version(asset_hub_polkadot_location(), XCM_VERSION);
+	BridgeHubPolkadot::force_xcm_version(asset_hub_kusama_location(), XCM_VERSION);
+	AssetHubPolkadot::force_xcm_version(asset_hub_kusama_location(), XCM_VERSION);
+	AssetHubKusama::force_xcm_version(asset_hub_polkadot_location(), XCM_VERSION);
+	BridgeHubKusama::force_xcm_version(asset_hub_polkadot_location(), XCM_VERSION);
+	BridgeHubKusama::force_xcm_version(asset_hub_kusama_location(), XCM_VERSION);
+
 	// Send KSMs over bridge
 	{
 		let destination = asset_hub_polkadot_location();
 		let assets: Assets = vec![
-			(Location::new(1, Here), amount.saturating_add(fees_amount)).into(), // KSM
+			(Location::new(1, Here), amount).into(), // KSM
 			(dot_on_kusama.clone(), fees_amount).into()
 		].into();
 
@@ -713,23 +739,53 @@ fn send_ksm_asset_hub_kusama_to_asset_hub_polkadot_using_dot_as_fee() {
 			beneficiary,
 		}]);
 
-		send_assets_from_kusama_chain_through_kusama_ah_to_polkadot_ah(|| {
-			// send message over bridge
-			assert_ok!(PenpalA::execute_with(|| {
-				let signed_origin = <PenpalA as Chain>::RuntimeOrigin::signed(sender.clone());
-				<PenpalA as PenpalAPallet>::PolkadotXcm::transfer_assets_using_type_and_then(
-					signed_origin,
-					bx!(destination.into()),
-					bx!(assets.into()),
-					bx!(asset_transfer_type),
-					bx!(fees_id.into()),
-					bx!(fees_transfer_type),
-					bx!(VersionedXcm::from(custom_xcm_on_dest)),
-					WeightLimit::Unlimited,
-				)
-			}));
-		});
+		// send message over bridge
+		assert_ok!(AssetHubKusama::execute_with(|| {
+			let signed_origin = <AssetHubKusama as Chain>::RuntimeOrigin::signed(sender.clone());
+			<AssetHubKusama as AssetHubKusamaPallet>::PolkadotXcm::transfer_assets_using_type_and_then(
+				signed_origin,
+				bx!(destination.into()),
+				bx!(assets.into()),
+				bx!(asset_transfer_type),
+				bx!(fees_id.into()),
+				bx!(fees_transfer_type),
+				bx!(VersionedXcm::from(custom_xcm_on_dest)),
+				WeightLimit::Unlimited,
+			)
+		}));
 	}
+
+	BridgeHubKusama::execute_with(|| {
+		type RuntimeEvent = <BridgeHubKusama as Chain>::RuntimeEvent;
+		assert_expected_events!(
+			BridgeHubKusama,
+			vec![
+				// pay for bridge fees
+				RuntimeEvent::Balances(pallet_balances::Event::Burned { .. }) => {},
+				// message exported
+				RuntimeEvent::BridgePolkadotMessages(
+					pallet_bridge_messages::Event::MessageAccepted { .. }
+				) => {},
+				// message processed successfully
+				RuntimeEvent::MessageQueue(
+					pallet_message_queue::Event::Processed { success: true, .. }
+				) => {},
+			]
+		);
+	});
+
+	BridgeHubPolkadot::execute_with(|| {
+		type RuntimeEvent = <BridgeHubPolkadot as Chain>::RuntimeEvent;
+		assert_expected_events!(
+			BridgeHubPolkadot,
+			vec![
+				// message sent to destination
+				RuntimeEvent::XcmpQueue(
+					cumulus_pallet_xcmp_queue::Event::XcmpMessageSent { .. }
+				) => {},
+			]
+		);
+	});
 
 	// process PAH incoming message and check events
 	AssetHubPolkadot::execute_with(|| {
@@ -750,3 +806,134 @@ fn send_ksm_asset_hub_kusama_to_asset_hub_polkadot_using_dot_as_fee() {
 		);
 	});
 }
+
+#[test]
+fn send_dot_asset_hub_kusama_to_asset_hub_polkadot_using_ksm_as_fee() {
+	let ksm_at_asset_hub_polkadot = bridged_ksm_at_ah_polkadot();
+	let amount = ASSET_HUB_KUSAMA_ED * 10_000_000;
+	let fees_amount = 50_000_0000;
+	let receiver = AssetHubPolkadotReceiver::get();
+	let sender = KusamaSender::get();
+
+	let assethub_location = BridgeHubPolkadot::sibling_location_of(AssetHubPolkadot::para_id());
+	let assethub_sovereign = BridgeHubPolkadot::sovereign_account_id_of(assethub_location);
+	let assethub_sovereign_kah = AssetHubPolkadot::sovereign_account_of_parachain_on_other_global_consensus(Kusama, AssetHubKusama::para_id());
+
+	AssetHubKusama::fund_accounts(vec![
+		(sender.clone(), amount * 2), // KSM
+	]);
+
+	BridgeHubPolkadot::fund_accounts(vec![
+		(assethub_sovereign.clone(), INITIAL_FUND),
+		(RelayTreasuryPalletAccount::get(), INITIAL_FUND),
+	]);
+	AssetHubPolkadot::fund_accounts(vec![
+		(assethub_sovereign_kah.clone(), INITIAL_FUND),
+		(AssetHubPolkadotReceiver::get(), INITIAL_FUND),
+		(sender.clone(), INITIAL_FUND),
+	]);
+	BridgeHubKusama::fund_para_sovereign(AssetHubKusama::para_id(), INITIAL_FUND);
+	BridgeHubPolkadot::fund_para_sovereign(AssetHubPolkadot::para_id(), INITIAL_FUND);
+
+	let dot_at_kusama_asset_hub = bridged_dot_at_ah_kusama();
+	let prefund_accounts = vec![(sender.clone(), amount * 2)];
+	create_foreign_on_ah_kusama(dot_at_kusama_asset_hub.clone(), true, prefund_accounts);
+	create_foreign_on_ah_polkadot(ksm_at_asset_hub_polkadot.clone(), true);
+
+	set_up_pool_with_dot_on_ah_polkadot(ksm_at_asset_hub_polkadot.clone(), true);
+
+	let dot_on_kusama = Location::new(2, [GlobalConsensus(Polkadot)]);
+
+	BridgeHubPolkadot::force_xcm_version(asset_hub_polkadot_location(), XCM_VERSION);
+	BridgeHubPolkadot::force_xcm_version(asset_hub_kusama_location(), XCM_VERSION);
+	AssetHubPolkadot::force_xcm_version(asset_hub_kusama_location(), XCM_VERSION);
+	AssetHubKusama::force_xcm_version(asset_hub_polkadot_location(), XCM_VERSION);
+	BridgeHubKusama::force_xcm_version(asset_hub_polkadot_location(), XCM_VERSION);
+	BridgeHubKusama::force_xcm_version(asset_hub_kusama_location(), XCM_VERSION);
+
+	// Send KSMs over bridge
+	{
+		let destination = asset_hub_polkadot_location();
+		let assets: Assets = vec![
+			(dot_on_kusama.clone(), amount).into(),
+			(Location::new(1, Here), fees_amount).into(), // KSM
+		].into();
+
+		let asset_transfer_type = TransferType::DestinationReserve;
+		let fees_id: AssetId = Location::new(1, Here).into();
+		let fees_transfer_type = TransferType::LocalReserve;
+		let beneficiary: Location =
+			AccountId32Junction { network: None, id: receiver.clone().into() }.into();
+		let custom_xcm_on_dest = Xcm::<()>(vec![DepositAsset {
+			assets: Wild(AllCounted(assets.len() as u32)),
+			beneficiary,
+		}]);
+
+		// send message over bridge
+		assert_ok!(AssetHubKusama::execute_with(|| {
+			let signed_origin = <AssetHubKusama as Chain>::RuntimeOrigin::signed(sender.clone());
+			<AssetHubKusama as AssetHubKusamaPallet>::PolkadotXcm::transfer_assets_using_type_and_then(
+				signed_origin,
+				bx!(destination.into()),
+				bx!(assets.into()),
+				bx!(asset_transfer_type),
+				bx!(fees_id.into()),
+				bx!(fees_transfer_type),
+				bx!(VersionedXcm::from(custom_xcm_on_dest)),
+				WeightLimit::Unlimited,
+			)
+		}));
+	}
+
+	BridgeHubKusama::execute_with(|| {
+		type RuntimeEvent = <BridgeHubKusama as Chain>::RuntimeEvent;
+		assert_expected_events!(
+			BridgeHubKusama,
+			vec![
+				// pay for bridge fees
+				RuntimeEvent::Balances(pallet_balances::Event::Burned { .. }) => {},
+				// message exported
+				RuntimeEvent::BridgePolkadotMessages(
+					pallet_bridge_messages::Event::MessageAccepted { .. }
+				) => {},
+				// message processed successfully
+				RuntimeEvent::MessageQueue(
+					pallet_message_queue::Event::Processed { success: true, .. }
+				) => {},
+			]
+		);
+	});
+
+	BridgeHubPolkadot::execute_with(|| {
+		type RuntimeEvent = <BridgeHubPolkadot as Chain>::RuntimeEvent;
+		assert_expected_events!(
+			BridgeHubPolkadot,
+			vec![
+				// message sent to destination
+				RuntimeEvent::XcmpQueue(
+					cumulus_pallet_xcmp_queue::Event::XcmpMessageSent { .. }
+				) => {},
+			]
+		);
+	});
+
+	// process PAH incoming message and check events
+	AssetHubPolkadot::execute_with(|| {
+		type RuntimeEvent = <AssetHubPolkadot as Chain>::RuntimeEvent;
+		assert_expected_events!(
+			AssetHubPolkadot,
+			vec![
+				// issue KSMs on PAH
+				RuntimeEvent::ForeignAssets(pallet_assets::Event::Issued { asset_id, owner, .. }) => {
+					asset_id: *asset_id == ksm_at_asset_hub_polkadot.clone(),
+					owner: owner == &receiver,
+				},
+				// message processed successfully
+				RuntimeEvent::MessageQueue(
+					pallet_message_queue::Event::Processed { success: true, .. }
+				) => {},
+			]
+		);
+	});
+}
+

@@ -26,6 +26,10 @@ mod snowbridge {
 	pub const WETH: [u8; 20] = hex_literal::hex!("87d1f7fdfEe7f651FaBc8bFCB6E086C278b77A7d");
 }
 
+pub(crate) fn asset_hub_kusama_location() -> Location {
+	Location::new(2, [GlobalConsensus(Kusama), Parachain(AssetHubKusama::para_id().into())])
+}
+
 pub(crate) fn asset_hub_polkadot_location() -> Location {
 	Location::new(2, [GlobalConsensus(Polkadot), Parachain(AssetHubPolkadot::para_id().into())])
 }
