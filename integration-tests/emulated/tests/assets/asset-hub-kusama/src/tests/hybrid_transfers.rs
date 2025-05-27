@@ -21,6 +21,7 @@ use crate::{
 };
 use asset_hub_kusama_runtime::xcm_config::KsmLocation;
 use emulated_integration_tests_common::USDT_ID;
+use asset_hub_kusama_runtime::xcm_config::bridging::{XcmBridgeHubRouterBaseFee, XcmBridgeHubRouterByteFee};
 
 fn para_to_para_assethub_hop_assertions(t: ParaToParaThroughAHTest) {
 	type RuntimeEvent = <AssetHubKusama as Chain>::RuntimeEvent;
@@ -994,4 +995,14 @@ fn usdt_only_transfer_from_para_to_para_through_asset_hub() {
 	// Receiver gets `transfer_amount` minus fees.
 	let receiver_balance_after = foreign_balance_on!(PenpalB, usdt_location.clone(), &receiver);
 	assert_eq!(receiver_balance_after, 990_665_188_940);
+}
+
+#[test]
+fn kusama_to_polkadot_bridging_fee() {
+	AssetHubKusama::execute_with(|| {
+		let value = XcmBridgeHubRouterBaseFee::get();
+		let byte_fee = XcmBridgeHubRouterByteFee::get();
+		println!("fee is {}", value); // 10602492378 KSM
+		println!("byte_fee is {}", byte_fee); // 1000000 KSM
+	});
 }

@@ -21,6 +21,7 @@ use crate::{
 };
 use asset_hub_polkadot_runtime::xcm_config::DotLocation;
 use emulated_integration_tests_common::USDT_ID;
+use asset_hub_polkadot_runtime::xcm_config::bridging::{XcmBridgeHubRouterBaseFee, XcmBridgeHubRouterByteFee};
 
 fn para_to_para_assethub_hop_assertions(t: ParaToParaThroughAHTest) {
 	type RuntimeEvent = <AssetHubPolkadot as Chain>::RuntimeEvent;
@@ -1004,3 +1005,14 @@ fn usdt_only_transfer_from_para_to_para_through_asset_hub() {
 	let receiver_balance_after = foreign_balance_on!(PenpalB, usdt_location.clone(), &receiver);
 	assert_eq!(receiver_balance_after, 992_693_493_387);
 }
+
+#[test]
+fn polkadot_to_kusama_bridging_fee() {
+	AssetHubPolkadot::execute_with(|| {
+		let value = XcmBridgeHubRouterBaseFee::get();
+		let byte_fee = XcmBridgeHubRouterByteFee::get();
+		println!("fee is {}", value); // 333794429 DOT (0.03 DOT)
+		println!("byte_fee is {}", byte_fee); // 16666 DOT (0.0000016666 DOT)
+	});
+}
+

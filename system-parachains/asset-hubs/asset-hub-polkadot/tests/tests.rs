@@ -1783,3 +1783,4 @@ fn polkadot_to_kusama_bridging_fee() {
 	);
 	println!("fee is {}", value); // 333794429 DOT (0.03 DOT)
 }
+
