@@ -202,10 +202,29 @@ impl frame_system::Config for Runtime {
 	type OnSetCode = cumulus_pallet_parachain_system::ParachainSetCode<Self>;
 	type MaxConsumers = ConstU32<256>;
 	type SingleBlockMigrations = ();
-	type MultiBlockMigrator = ();
+	type MultiBlockMigrator = MultiBlockMigrations;
 	type PreInherents = ();
 	type PostInherents = ();
 	type PostTransactions = ();
+}
+
+parameter_types! {
+	pub MbmServiceWeight: Weight = Perbill::from_percent(80) * RuntimeBlockWeights::get().max_block;
+}
+
+impl pallet_migrations::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	#[cfg(not(feature = "runtime-benchmarks"))]
+	type Migrations = pallet_revive::migrations::v1::Migration<Runtime>;
+	// Benchmarks need mocked migrations to guarantee that they succeed.
+	#[cfg(feature = "runtime-benchmarks")]
+	type Migrations = pallet_migrations::mock_helpers::MockedMigrations;
+	type CursorMaxLen = ConstU32<65_536>;
+	type IdentifierMaxLen = ConstU32<256>;
+	type MigrationStatusHandler = ();
+	type FailedMigrationHandler = frame_support::migrations::FreezeChainOnFailedMigration;
+	type MaxServiceWeight = MbmServiceWeight;
+	type WeightInfo = weights::pallet_migrations::WeightInfo<Runtime>;
 }
 
 impl pallet_timestamp::Config for Runtime {
@@ -549,16 +568,22 @@ impl InstanceFilter<RuntimeCall> for ProxyType {
 	fn filter(&self, c: &RuntimeCall) -> bool {
 		match self {
 			ProxyType::Any => true,
-			ProxyType::NonTransfer => !matches!(
+			ProxyType::NonTransfer => matches!(
 				c,
-				RuntimeCall::Balances { .. } |
-					RuntimeCall::Assets { .. } |
-					RuntimeCall::NftFractionalization { .. } |
-					RuntimeCall::Nfts { .. } |
-					RuntimeCall::Uniques { .. } |
+				RuntimeCall::System(_) |
+					RuntimeCall::ParachainSystem(_) |
+					RuntimeCall::Timestamp(_) |
 					// We allow calling `vest` and merging vesting schedules, but obviously not
 					// vested transfers.
-					RuntimeCall::Vesting(pallet_vesting::Call::vested_transfer { .. })
+					RuntimeCall::Vesting(pallet_vesting::Call::vest { .. }) |
+					RuntimeCall::Vesting(pallet_vesting::Call::vest_other { .. }) |
+					RuntimeCall::Vesting(pallet_vesting::Call::merge_schedules { .. }) |
+					RuntimeCall::CollatorSelection(_) |
+					RuntimeCall::Session(_) |
+					RuntimeCall::Utility(_) |
+					RuntimeCall::Multisig(_) |
+					RuntimeCall::Proxy(_) |
+					RuntimeCall::RemoteProxyRelayChain(_)
 			),
 			ProxyType::CancelProxy => matches!(
 				c,
@@ -1073,6 +1098,7 @@ construct_runtime!(
 		// RandomnessCollectiveFlip = 2 removed
 		Timestamp: pallet_timestamp = 3,
 		ParachainInfo: parachain_info = 4,
+		MultiBlockMigrations: pallet_migrations = 5,
 
 		// Monetary stuff.
 		Balances: pallet_balances = 10,
@@ -1274,6 +1300,7 @@ mod benches {
 		[pallet_asset_conversion_tx_payment, AssetTxPayment]
 		[pallet_balances, Balances]
 		[pallet_message_queue, MessageQueue]
+		[pallet_migrations, MultiBlockMigrations]
 		[pallet_multisig, Multisig]
 		[pallet_nft_fractionalization, NftFractionalization]
 		[pallet_nfts, Nfts]
